@@ -1,0 +1,77 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: leadpilot_app
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - postgres
+      - redis
+
+  nginx:
+    image: nginx:alpine
+    container_name: leadpilot_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: leadpilot_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: leadpilot
+      POSTGRES_USER: leadpilot
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: leadpilot_redis
+    ports:
+      - "6379:6379"
+
+  queue:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: leadpilot_queue
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    command: php artisan queue:work --tries=3 --timeout=90
+    depends_on:
+      - app
+      - redis
+      - postgres
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: leadpilot_scheduler
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    command: php artisan schedule:work
+    depends_on:
+      - app
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: leadpilot_mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  postgres_data:
